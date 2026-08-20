@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "collections": [
+    {
+      "path": "users/{userId}/profile",
+      "description": "User profile customizations and settings",
+      "schema": {
+        "userId": "string",
+        "name": "string",
+        "title": "string",
+        "bio": "string",
+        "tagline": "string",
+        "location": "string",
+        "email": "string",
+        "socials": "map",
+        "updatedAt": "timestamp"
+      }
+    },
+    {
+      "path": "users/{userId}/starred_projects",
+      "description": "User starred and saved portfolio projects",
+      "schema": {
+        "projectId": "string",
+        "title": "string",
+        "starredAt": "timestamp"
+      }
+    },
+    {
+      "path": "endorsements/{endorsementId}",
+      "description": "Community peer endorsements, recommendations and guestbook messages",
+      "schema": {
+        "authorId": "string",
+        "authorName": "string",
+        "authorAvatar": "string",
+        "authorRole": "string",
+        "content": "string",
+        "rating": "number",
+        "skill": "string",
+        "createdAt": "timestamp"
+      }
+    },
+    {
+      "path": "contact_messages/{messageId}",
+      "description": "Direct contact inquiries sent through the portfolio",
+      "schema": {
+        "name": "string",
+        "email": "string",
+        "subject": "string",
+        "message": "string",
+        "createdAt": "timestamp",
+        "senderId": "string?"
+      }
+    }
+  ]
+}

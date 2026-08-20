@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User profile documents - users can manage their own profile, anyone can read
+    match /users/{userId}/profile/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // User starred projects - user specific
+    match /users/{userId}/starred_projects/{projectId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Endorsements & Guestbook - anyone can read, signed-in users can create
+    match /endorsements/{endorsementId} {
+      allow read: if true;
+      allow create: if request.auth != null 
+                    && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if request.auth != null 
+                           && resource.data.authorId == request.auth.uid;
+    }
+
+    // Contact messages - anyone can submit
+    match /contact_messages/{messageId} {
+      allow create: if true;
+      allow read: if request.auth != null;
+    }
+  }
+}
