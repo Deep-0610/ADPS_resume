@@ -26,9 +26,146 @@ var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_url = require("url");
 var import_vite = require("vite");
-var import_genai = require("@google/genai");
 var import_nodemailer = __toESM(require("nodemailer"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
+
+// server/chatbot.js
+var ROUTES = {
+  home: "",
+  experience: "experience",
+  certifications: "certifications",
+  projects: "projects",
+  contact: "contact"
+};
+var STOP_WORDS = /* @__PURE__ */ new Set([
+  "a",
+  "about",
+  "and",
+  "are",
+  "can",
+  "could",
+  "deep",
+  "do",
+  "for",
+  "give",
+  "he",
+  "his",
+  "i",
+  "is",
+  "me",
+  "my",
+  "of",
+  "please",
+  "tell",
+  "the",
+  "what",
+  "where",
+  "who",
+  "with",
+  "you",
+  "your"
+]);
+var INTENTS = [
+  {
+    name: "navigation",
+    phrases: ["navigate", "go to", "open", "show me the", "take me to", "page", "section", "website"],
+    keywords: ["home", "experience", "certification", "project", "contact", "resume", "cv"]
+  },
+  {
+    name: "contact",
+    phrases: ["contact", "get in touch", "reach", "hire", "email", "phone", "available"],
+    keywords: ["opportunity", "recruiter", "location"]
+  },
+  {
+    name: "experience",
+    phrases: ["work experience", "professional experience", "assistant cto", "assistant c.t.o", "worked at"],
+    keywords: ["experience", "spiroedu", "leadership", "responsibilities", "employment"]
+  },
+  {
+    name: "certifications",
+    phrases: ["certifications", "certificates", "credentials", "verification"],
+    keywords: ["walmart", "coursera", "infosys", "iim", "iit", "simplilearn", "blockchain", "cryptography"]
+  },
+  {
+    name: "projects",
+    phrases: ["projects", "built", "portfolio work", "what has he made"],
+    keywords: ["project", "platform", "pipeline", "ledger", "optimizer"]
+  },
+  {
+    name: "skills",
+    phrases: ["technical skills", "tech stack", "technologies", "programming languages"],
+    keywords: ["skills", "stack", "react", "node", "express", "mongodb", "sql", "javascript", "typescript", "java"]
+  },
+  {
+    name: "education",
+    phrases: ["education", "study", "college", "degree", "university"],
+    keywords: ["student", "btech", "engineering", "sakec", "mumbai"]
+  },
+  {
+    name: "objective",
+    phrases: ["career objective", "looking for", "what role", "requirements", "job requirement"],
+    keywords: ["role", "career", "forward deployment", "full stack", "opportunity"]
+  }
+];
+var NAVIGATION_TARGETS = [
+  { names: ["home", "homepage"], path: ROUTES.home, label: "Home" },
+  { names: ["experience", "work"], path: ROUTES.experience, label: "Experience" },
+  { names: ["certification", "certifications", "certificate"], path: ROUTES.certifications, label: "Certifications" },
+  { names: ["project", "projects"], path: ROUTES.projects, label: "Projects" },
+  { names: ["contact", "get in touch"], path: ROUTES.contact, label: "Contact" },
+  { names: ["resume", "cv"], path: ROUTES.home, label: "Resume" }
+];
+var ANSWERS = {
+  experience: `**Deep Chaudhari** was **Assistant C.T.O. / Full Stack Engineering Lead** at **SpiroEdu Education Pvt Ltd**, incubated at SAKEC TBI, from **January 2025 to September 2025**.
+
+He led React frontend work, authentication, REST APIs, MongoDB and SQL data flows, payment webhooks, responsive Figma implementation, and gamified user experiences.`,
+  certifications: `Deep has **9 verified certifications**, including Walmart USA's Advanced Software Engineering simulation, two University of California Irvine credentials, two Infosys Springboard credentials, IIM Bangalore Foundations of French, an SPIRO internship certificate, Simplilearn Full-Stack Development 101, and IIT Bombay C Training.
+
+Open the [Certifications](/ADPS_resume/certifications) page to inspect the verification details.`,
+  projects: `Deep's featured work includes the **SpiroEdu Learning & Payment Engine**, a **Forward Deployment AI Agent & Search Pipeline**, a **Cryptographic Hash & Block Verification Engine**, and an **Enterprise Relational DB Optimizer & Munging Pipeline**.
+
+Open the [Projects](/ADPS_resume/projects) page for the project details and technology lists.`,
+  skills: `Deep's documented stack includes **React 19, TypeScript, JavaScript, Tailwind CSS, Node.js, Express.js, REST APIs, JWT authentication, SQL/PostgreSQL, MongoDB, Java, C, blockchain, cryptography, Google Gemini integration, Git, and GitHub**.`,
+  education: `Deep is an undergraduate **B.Tech Computer Engineering** student at **Shah & Anchor Kutchhi Engineering College (SAKEC)** in Mumbai, with an expected study period of **2024 to 2028**.`,
+  objective: `Deep is seeking **Forward Deployment Engineer** and **Full-Stack Software Engineering** opportunities. His focus is integrating AI solutions, building secure backend systems, and deploying scalable software in complex client environments.`,
+  contact: `You can reach **Deep Chaudhari** at [deepsc0606@gmail.com](mailto:deepsc0606@gmail.com) or [+91 7738266248](tel:+917738266248). He is based in Mumbai, Maharashtra, India. Use the [Contact](/ADPS_resume/contact) page to send an inquiry.`
+};
+var OUT_OF_SCOPE_REPLY = `I can only answer questions about **Deep Chaudhari's resume, experience, skills, certifications, projects, career requirements, contact details, and this website's navigation**. Try asking about one of those topics.`;
+function normalize(text) {
+  return text.toLowerCase().replace(/[^a-z0-9.#+\s-]/g, " ").replace(/\s+/g, " ").trim();
+}
+function tokens(text) {
+  return new Set(normalize(text).split(" ").filter((token) => token && !STOP_WORDS.has(token)));
+}
+function scoreIntent(query, intent) {
+  const normalized = normalize(query);
+  const queryTokens = tokens(query);
+  const phraseScore = intent.phrases.reduce((score, phrase) => score + (normalized.includes(phrase) ? 3 : 0), 0);
+  const keywordScore = intent.keywords.reduce((score, keyword) => {
+    const keywordTokens = tokens(keyword);
+    const matches = [...keywordTokens].filter((token) => queryTokens.has(token)).length;
+    return score + (matches === keywordTokens.size ? 2 : 0);
+  }, 0);
+  return phraseScore + keywordScore;
+}
+function classifyIntent(query) {
+  const ranked = INTENTS.map((intent) => ({ name: intent.name, score: scoreIntent(query, intent) })).sort((left, right) => right.score - left.score);
+  return ranked[0]?.score > 0 ? ranked[0].name : "out_of_scope";
+}
+function findNavigationTarget(query) {
+  const normalized = normalize(query);
+  return NAVIGATION_TARGETS.find((target) => target.names.some((name) => normalized.includes(name)));
+}
+function answerResumeQuestion(query) {
+  const intent = classifyIntent(query);
+  if (intent === "navigation") {
+    const target = findNavigationTarget(query);
+    return target ? `Opening the [${target.label}](${target.path}) page.` : `Use the navigation bar to open [Experience](${ROUTES.experience}), [Certifications](${ROUTES.certifications}), [Projects](${ROUTES.projects}), or [Contact](${ROUTES.contact}).`;
+  }
+  return ANSWERS[intent] || OUT_OF_SCOPE_REPLY;
+}
+
+// server.js
 var import_meta = {};
 import_dotenv.default.config();
 var __filename = (0, import_url.fileURLToPath)(import_meta.url);
@@ -82,18 +219,6 @@ setInterval(() => {
     }
   }
 }, 6e4);
-var aiClient = null;
-function getAiClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn("[Gemini AI] GEMINI_API_KEY is not set in environment variables.");
-    return null;
-  }
-  if (!aiClient) {
-    aiClient = new import_genai.GoogleGenAI({ apiKey });
-  }
-  return aiClient;
-}
 async function createMailTransporter() {
   const host = process.env.EMAIL_HOST || "smtp.ethereal.email";
   const port = parseInt(process.env.EMAIL_PORT || "587", 10);
@@ -260,7 +385,7 @@ async function startServer() {
   const chatRateLimiter = createRateLimiter(60 * 1e3, 25, "chat");
   app.post("/api/chat", chatRateLimiter, async (req, res) => {
     try {
-      const { message, history } = req.body;
+      const { message } = req.body;
       if (!message || typeof message !== "string") {
         return res.status(400).json({ error: "Valid message string is required." });
       }
@@ -268,127 +393,11 @@ async function startServer() {
       if (!cleanUserMessage) {
         return res.status(400).json({ error: "Message contains invalid characters." });
       }
-      const ai = getAiClient();
-      const systemInstruction = `
-You are "Deep's AI Assistant & Engineering Copilot", representing Deep Chaudhari (Deep Sandeep Chaudhari) \u2014 Full-Stack Software Engineer & Forward Deployment Engineer candidate.
-
-Key Facts about Deep Chaudhari:
-- **Identity**: Full-Stack Computer Engineering student at Shah & Anchor Kutchhi Engineering College (SAKEC), Mumbai (B.Tech 2024-2028).
-- **Leadership & Work Experience**: Former Assistant C.T.O. / Full Stack Engineering Lead at SpiroEdu Education Pvt Ltd (incubated at SAKEC Technology Business Incubator, Jan 2025 - Sep 2025).
-  - Built core web platform with gamified UI, responsive Figma token integration, and multi-step routing.
-  - Engineered backend user authentication (register, login, password handling, JWT).
-  - Created REST APIs for user management and secure data handling.
-  - Integrated MongoDB / SQL databases for persistent storage and secure payment form submissions.
-- **Career Objective**: Seeking a Forward Deployment Engineer or Full-Stack Software Engineering role to integrate AI solutions, build secure backend systems, and deploy scalable software directly into client environments.
-- **Verified Certifications (9 Certifications)**:
-  1. Walmart USA - Advanced Software Engineering Job Simulation (Forage, Aug 2026: Advanced Data Structures, Software Architecture, Relational DB Design, Data Munging).
-  2. The Blockchain - University of California, Irvine / Coursera (Feb 2026, ID: Y8MI49O5BU0Q).
-  3. Cryptography and Hashing Overview - University of California, Irvine / Coursera (Jul 2026, ID: KOFHF49B8XMO).
-  4. Data Structures and Algorithms using Java - Infosys Springboard (Dec 2025).
-  5. Database Fundamentals: Getting Started with SQL - Infosys Springboard (Feb 2026).
-  6. Foundations of French (Score: 67.0%) - Indian Institute of Management Bangalore (IIMB) / SWAYAM (Jul 2026, ID: MR160300941).
-  7. Full-Stack Development 101 - Simplilearn SkillUp (Jul 2025, Code: 8612418).
-  8. C Training Certification (Score: 50.0%) - IIT Bombay Spoken Tutorial (Mar 2025, ID: 4283529ISU).
-  9. Internship Completion Certificate - SPIRO / SAKEC TBI (Feb 2026, Ref: SAKEC/TBI/2639/2025-26).
-- **Core Skills**: React 19, TypeScript, Node.js, Express, REST APIs, Java, C, SQL/PostgreSQL, MongoDB, Blockchain & Cryptography, Data Structures & Algorithms, Google Gemini AI integration.
-- **Contact Details**: Email: deepsc0606@gmail.com | Phone: +91 7738266248 | Location: Mumbai, India.
-- **Tone**: Warm, confident, professional, articulate, and engineering-focused. Highlight Deep's hands-on leadership, quick learning agility, and readiness for Forward Deployment and software development challenges.
-      `;
-      if (!ai) {
-        const lower = cleanUserMessage.toLowerCase();
-        let fallbackText = "";
-        if (lower.includes("experience") || lower.includes("spiro") || lower.includes("cto") || lower.includes("work")) {
-          fallbackText = `**Deep Chaudhari** served as **Assistant C.T.O.** at **SpiroEdu Education Pvt Ltd** (SAKEC TBI, Jan 2025 \u2013 Sep 2025).
-
-Key achievements include:
-- **Full-Stack Architecture**: Built the core portal including Team, Terms, Contact, and Payment pages with responsive Figma integration and gamified UI.
-- **Authentication & Security**: Engineered full user auth (register, login, password security, session handling).
-- **REST APIs & Database**: Designed performant backend APIs, connected databases (MongoDB & SQL) for persistent user storage, and ensured secure data pipelines between client and server.`;
-        } else if (lower.includes("certificate") || lower.includes("walmart") || lower.includes("coursera") || lower.includes("infosys") || lower.includes("credential")) {
-          fallbackText = `Deep holds **9 verified professional certifications**:
-
-1. **Walmart USA**: Advanced Software Engineering Job Simulation (Data Structures, Architecture, Relational DB Design)
-2. **UC Irvine**: The Blockchain (Decentralized networks & smart contracts)
-3. **UC Irvine**: Cryptography & Hashing Overview (Cryptographic principles & hash functions)
-4. **Infosys Springboard**: Data Structures & Algorithms using Java
-5. **Infosys Springboard**: Database Fundamentals: Getting Started with SQL
-6. **IIM Bangalore / SWAYAM**: Foundations of French (Score: 67.0%)
-7. **IIT Bombay**: C Programming Certification
-8. **Simplilearn**: Full-Stack Development 101
-9. **SAKEC TBI**: Official Internship Completion Certificate (SPIRO)`;
-        } else if (lower.includes("contact") || lower.includes("hire") || lower.includes("email") || lower.includes("phone") || lower.includes("reach")) {
-          fallbackText = `You can reach **Deep Chaudhari** directly:
-
-- \u{1F4E7} **Email**: [deepsc0606@gmail.com](mailto:deepsc0606@gmail.com)
-- \u{1F4F1} **Phone**: [+91 7738266248](tel:+917738266248)
-- \u{1F4CD} **Location**: Mumbai, India
-- \u{1F393} **Education**: B.Tech Computer Engineering (2024-2028), Shah & Anchor Kutchhi Engineering College
-
-You can also submit a direct message via the **Contact** page!`;
-        } else if (lower.includes("skills") || lower.includes("tech") || lower.includes("stack")) {
-          fallbackText = `Deep's technical stack spans:
-
-- **Frontend**: React 19, TypeScript, JavaScript (ES6+), Tailwind CSS, Figma design tokens, gamified UI.
-- **Backend**: Node.js, Express, REST APIs, User Auth/JWT, Session Management, Payment Webhooks.
-- **Databases & Systems**: SQL / PostgreSQL, MongoDB, Data Structures & Algorithms in Java and C.
-- **Emerging Tech**: Blockchain ledgers, Cryptographic Hashing, Google Gemini AI integrations, and Forward Deployment methodologies.`;
-        } else {
-          fallbackText = `Hello! I'm **Deep Chaudhari's AI Copilot**.
-
-Deep is a **Full-Stack Software Engineer & Forward Deployment Engineer** candidate and former **Assistant C.T.O. at SpiroEdu**. He specializes in building robust REST APIs, modern React platforms, relational databases, blockchain architectures, and AI systems.
-
-Ask me about Deep's work experience at SpiroEdu, his 9 verified certifications (Walmart, UC Irvine, Infosys, IIM Bangalore, IIT Bombay), his technical skills, or how to contact him!`;
-        }
-        return res.json({
-          reply: fallbackText,
-          model: "deep-portfolio-ai",
-          isFallback: true
-        });
-      }
-      let contents = cleanUserMessage;
-      if (Array.isArray(history) && history.length > 0) {
-        const formattedHistory = history.slice(-6).map((item) => ({
-          role: item.sender === "user" ? "user" : "model",
-          parts: [{ text: sanitizeInput(item.text).slice(0, 1e3) }]
-        }));
-        formattedHistory.push({
-          role: "user",
-          parts: [{ text: cleanUserMessage }]
-        });
-        contents = formattedHistory;
-      }
-      let reply = "";
-      try {
-        const response = await ai.models.generateContent({
-          model: "gemini-3.7-flash",
-          contents,
-          config: {
-            systemInstruction,
-            temperature: 0.7
-          }
-        });
-        reply = response.text || "I'm here to share all details about Deep Chaudhari's software engineering background and project experience. Reach him at deepsc0606@gmail.com.";
-      } catch (geminiErr) {
-        console.warn("[Gemini 3.7 Flash fallback]:", geminiErr?.message);
-        try {
-          const response = await ai.models.generateContent({
-            model: "gemini-3.6-flash",
-            contents,
-            config: {
-              systemInstruction,
-              temperature: 0.7
-            }
-          });
-          reply = response.text || "I'm here to share all details about Deep Chaudhari's software engineering background and project experience. Reach him at deepsc0606@gmail.com.";
-        } catch (secondaryErr) {
-          console.error("[Gemini API Call Failed]:", secondaryErr);
-          reply = "Deep Chaudhari is a Full-Stack Software Engineer & Forward Deployment candidate (Ex-Assistant C.T.O. at SpiroEdu) with 9 verified certifications from Walmart USA, UC Irvine, Infosys, IIM Bangalore, and IIT Bombay. You can contact him directly at deepsc0606@gmail.com or +91 7738266248.";
-        }
-      }
       res.json({
-        reply,
-        model: "gemini-3.7-flash",
-        isFallback: false
+        reply: answerResumeQuestion(cleanUserMessage),
+        model: "local-resume-nlp",
+        isFallback: true,
+        scope: "resume-and-navigation"
       });
     } catch (error) {
       console.error("[POST /api/chat Error]:", error);
