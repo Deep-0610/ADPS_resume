@@ -46,7 +46,7 @@ export default function App() {
   }, []);
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
       <div className="min-h-screen bg-[#FAF9F6] text-[#0F172A] flex flex-col font-sans selection:bg-[#D1FAE5] selection:text-[#064E3B] bg-grid-organic">
         {/* Scroll Restorer */}
         <ScrollToTopOnRoute />

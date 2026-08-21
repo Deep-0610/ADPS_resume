@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig(() => {
   return {
+    base: process.env.NODE_ENV === 'production' ? '/ADPS_resume/' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

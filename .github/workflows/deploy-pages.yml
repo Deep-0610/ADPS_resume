@@ -31,6 +31,10 @@ jobs:
       - name: Build client
         run: npm run build
 
+      - name: Support client-side routes
+        run: Copy-Item dist/index.html dist/404.html
+        shell: pwsh
+
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
