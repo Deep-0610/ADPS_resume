@@ -2,9 +2,9 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import { answerResumeQuestion } from './server/chatbot.js';
 
 dotenv.config();
 
@@ -81,22 +81,6 @@ setInterval(() => {
     }
   }
 }, 60000);
-
-// ==========================================
-// 🤖 GEMINI AI CLIENT CONFIGURATION
-// ==========================================
-let aiClient = null;
-function getAiClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn('[Gemini AI] GEMINI_API_KEY is not set in environment variables.');
-    return null;
-  }
-  if (!aiClient) {
-    aiClient = new GoogleGenAI({ apiKey });
-  }
-  return aiClient;
-}
 
 // ==========================================
 // 📬 NODEMAILER TRANSPORTER SETUP
@@ -295,12 +279,12 @@ async function startServer() {
     }
   });
 
-  // POST /api/chat - AI Conversational Assistant with Rate Limiting & Safe Fallbacks
+  // POST /api/chat - Resume and website navigation assistant
   const chatRateLimiter = createRateLimiter(60 * 1000, 25, 'chat'); // 25 queries per minute
 
   app.post('/api/chat', chatRateLimiter, async (req, res) => {
     try {
-      const { message, history } = req.body;
+      const { message } = req.body;
 
       if (!message || typeof message !== 'string') {
         return res.status(400).json({ error: 'Valid message string is required.' });
@@ -311,105 +295,11 @@ async function startServer() {
         return res.status(400).json({ error: 'Message contains invalid characters.' });
       }
 
-      const ai = getAiClient();
-
-      const systemInstruction = `
-You are "Deep's AI Assistant & Engineering Copilot", representing Deep Chaudhari (Deep Sandeep Chaudhari) — Full-Stack Software Engineer & Forward Deployment Engineer candidate.
-
-Key Facts about Deep Chaudhari:
-- **Identity**: Full-Stack Computer Engineering student at Shah & Anchor Kutchhi Engineering College (SAKEC), Mumbai (B.Tech 2024-2028).
-- **Leadership & Work Experience**: Former Assistant C.T.O. / Full Stack Engineering Lead at SpiroEdu Education Pvt Ltd (incubated at SAKEC Technology Business Incubator, Jan 2025 - Sep 2025).
-  - Built core web platform with gamified UI, responsive Figma token integration, and multi-step routing.
-  - Engineered backend user authentication (register, login, password handling, JWT).
-  - Created REST APIs for user management and secure data handling.
-  - Integrated MongoDB / SQL databases for persistent storage and secure payment form submissions.
-- **Career Objective**: Seeking a Forward Deployment Engineer or Full-Stack Software Engineering role to integrate AI solutions, build secure backend systems, and deploy scalable software directly into client environments.
-- **Verified Certifications (9 Certifications)**:
-  1. Walmart USA - Advanced Software Engineering Job Simulation (Forage, Aug 2026: Advanced Data Structures, Software Architecture, Relational DB Design, Data Munging).
-  2. The Blockchain - University of California, Irvine / Coursera (Feb 2026, ID: Y8MI49O5BU0Q).
-  3. Cryptography and Hashing Overview - University of California, Irvine / Coursera (Jul 2026, ID: KOFHF49B8XMO).
-  4. Data Structures and Algorithms using Java - Infosys Springboard (Dec 2025).
-  5. Database Fundamentals: Getting Started with SQL - Infosys Springboard (Feb 2026).
-  6. Foundations of French (Score: 67.0%) - Indian Institute of Management Bangalore (IIMB) / SWAYAM (Jul 2026, ID: MR160300941).
-  7. Full-Stack Development 101 - Simplilearn SkillUp (Jul 2025, Code: 8612418).
-  8. C Training Certification (Score: 50.0%) - IIT Bombay Spoken Tutorial (Mar 2025, ID: 4283529ISU).
-  9. Internship Completion Certificate - SPIRO / SAKEC TBI (Feb 2026, Ref: SAKEC/TBI/2639/2025-26).
-- **Core Skills**: React 19, TypeScript, Node.js, Express, REST APIs, Java, C, SQL/PostgreSQL, MongoDB, Blockchain & Cryptography, Data Structures & Algorithms, Google Gemini AI integration.
-- **Contact Details**: Email: deepsc0606@gmail.com | Phone: +91 7738266248 | Location: Mumbai, India.
-- **Tone**: Warm, confident, professional, articulate, and engineering-focused. Highlight Deep's hands-on leadership, quick learning agility, and readiness for Forward Deployment and software development challenges.
-      `;
-
-      if (!ai) {
-        // Fallback intelligent responder if API key is not configured
-        const lower = cleanUserMessage.toLowerCase();
-        let fallbackText = '';
-
-        if (lower.includes('experience') || lower.includes('spiro') || lower.includes('cto') || lower.includes('work')) {
-          fallbackText = `**Deep Chaudhari** served as **Assistant C.T.O.** at **SpiroEdu Education Pvt Ltd** (SAKEC TBI, Jan 2025 – Sep 2025).\n\nKey achievements include:\n- **Full-Stack Architecture**: Built the core portal including Team, Terms, Contact, and Payment pages with responsive Figma integration and gamified UI.\n- **Authentication & Security**: Engineered full user auth (register, login, password security, session handling).\n- **REST APIs & Database**: Designed performant backend APIs, connected databases (MongoDB & SQL) for persistent user storage, and ensured secure data pipelines between client and server.`;
-        } else if (lower.includes('certificate') || lower.includes('walmart') || lower.includes('coursera') || lower.includes('infosys') || lower.includes('credential')) {
-          fallbackText = `Deep holds **9 verified professional certifications**:\n\n1. **Walmart USA**: Advanced Software Engineering Job Simulation (Data Structures, Architecture, Relational DB Design)\n2. **UC Irvine**: The Blockchain (Decentralized networks & smart contracts)\n3. **UC Irvine**: Cryptography & Hashing Overview (Cryptographic principles & hash functions)\n4. **Infosys Springboard**: Data Structures & Algorithms using Java\n5. **Infosys Springboard**: Database Fundamentals: Getting Started with SQL\n6. **IIM Bangalore / SWAYAM**: Foundations of French (Score: 67.0%)\n7. **IIT Bombay**: C Programming Certification\n8. **Simplilearn**: Full-Stack Development 101\n9. **SAKEC TBI**: Official Internship Completion Certificate (SPIRO)`;
-        } else if (lower.includes('contact') || lower.includes('hire') || lower.includes('email') || lower.includes('phone') || lower.includes('reach')) {
-          fallbackText = `You can reach **Deep Chaudhari** directly:\n\n- 📧 **Email**: [deepsc0606@gmail.com](mailto:deepsc0606@gmail.com)\n- 📱 **Phone**: [+91 7738266248](tel:+917738266248)\n- 📍 **Location**: Mumbai, India\n- 🎓 **Education**: B.Tech Computer Engineering (2024-2028), Shah & Anchor Kutchhi Engineering College\n\nYou can also submit a direct message via the **Contact** page!`;
-        } else if (lower.includes('skills') || lower.includes('tech') || lower.includes('stack')) {
-          fallbackText = `Deep's technical stack spans:\n\n- **Frontend**: React 19, TypeScript, JavaScript (ES6+), Tailwind CSS, Figma design tokens, gamified UI.\n- **Backend**: Node.js, Express, REST APIs, User Auth/JWT, Session Management, Payment Webhooks.\n- **Databases & Systems**: SQL / PostgreSQL, MongoDB, Data Structures & Algorithms in Java and C.\n- **Emerging Tech**: Blockchain ledgers, Cryptographic Hashing, Google Gemini AI integrations, and Forward Deployment methodologies.`;
-        } else {
-          fallbackText = `Hello! I'm **Deep Chaudhari's AI Copilot**.\n\nDeep is a **Full-Stack Software Engineer & Forward Deployment Engineer** candidate and former **Assistant C.T.O. at SpiroEdu**. He specializes in building robust REST APIs, modern React platforms, relational databases, blockchain architectures, and AI systems.\n\nAsk me about Deep's work experience at SpiroEdu, his 9 verified certifications (Walmart, UC Irvine, Infosys, IIM Bangalore, IIT Bombay), his technical skills, or how to contact him!`;
-        }
-
-        return res.json({
-          reply: fallbackText,
-          model: 'deep-portfolio-ai',
-          isFallback: true
-        });
-      }
-
-      // Format conversational contents if history is provided
-      let contents = cleanUserMessage;
-      if (Array.isArray(history) && history.length > 0) {
-        const formattedHistory = history.slice(-6).map((item) => ({
-          role: item.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: sanitizeInput(item.text).slice(0, 1000) }]
-        }));
-        formattedHistory.push({
-          role: 'user',
-          parts: [{ text: cleanUserMessage }]
-        });
-        contents = formattedHistory;
-      }
-
-      let reply = '';
-      try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents,
-          config: {
-            systemInstruction,
-            temperature: 0.7,
-          },
-        });
-        reply = response.text || "I'm here to share all details about Deep Chaudhari's software engineering background and project experience. Reach him at deepsc0606@gmail.com.";
-      } catch (geminiErr) {
-        console.warn('[Gemini 3.7 Flash fallback]:', geminiErr?.message);
-        try {
-          const response = await ai.models.generateContent({
-            model: 'gemini-3.6-flash',
-            contents,
-            config: {
-              systemInstruction,
-              temperature: 0.7,
-            },
-          });
-          reply = response.text || "I'm here to share all details about Deep Chaudhari's software engineering background and project experience. Reach him at deepsc0606@gmail.com.";
-        } catch (secondaryErr) {
-          console.error('[Gemini API Call Failed]:', secondaryErr);
-          reply = "Deep Chaudhari is a Full-Stack Software Engineer & Forward Deployment candidate (Ex-Assistant C.T.O. at SpiroEdu) with 9 verified certifications from Walmart USA, UC Irvine, Infosys, IIM Bangalore, and IIT Bombay. You can contact him directly at deepsc0606@gmail.com or +91 7738266248.";
-        }
-      }
-
       res.json({
-        reply,
-        model: 'gemini-3.7-flash',
-        isFallback: false
+        reply: answerResumeQuestion(cleanUserMessage),
+        model: 'local-resume-nlp',
+        isFallback: true,
+        scope: 'resume-and-navigation'
       });
     } catch (error) {
       console.error('[POST /api/chat Error]:', error);
