@@ -105,7 +105,8 @@ export const Chatbot = ({
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/chat', {
+      const chatApiUrl = import.meta.env.VITE_CHAT_API_URL || '/api/chat';
+      const response = await fetch(chatApiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
