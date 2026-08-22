@@ -1,7 +1,7 @@
 export const DEEP_PROFILE = {
   name: 'Deep Chaudhari',
   fullName: 'Deep Sandeep Chaudhari',
-  photo: `${import.meta.env.BASE_URL}assets/Deep.png`,
+  photo: 'https://www.dropbox.com/scl/fi/i0vh2bhe6mtyo1frng16c/file.png?rlkey=hftbq48dlpg0lyqctjdh80b17&st=r7u70pfd&raw=1',
   title: 'Full-Stack Software Engineer & Forward Deployment Engineer',
   tagline: 'Former Assistant C.T.O. | Building High-Resilience Web Platforms, Secure APIs & AI Systems',
   email: 'deepsc0606@gmail.com',
